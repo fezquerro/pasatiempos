@@ -10,16 +10,7 @@ Aplicación web de pasatiempos en español de España, pensada para el iPhone
 
 No necesita compilación ni dependencias: es HTML, CSS y JavaScript.
 
-## Publicar en GitHub Pages
 
-1. Crea un repositorio en GitHub (por ejemplo `pasatiempos`) y sube este directorio:
-   ```bash
-   git remote add origin https://github.com/TU_USUARIO/pasatiempos.git
-   git push -u origin main
-   ```
-2. En el repositorio: **Settings → Pages → Build and deployment → Deploy from a branch**,
-   rama `main`, carpeta `/ (root)`.
-3. Al cabo de un minuto estará en `https://TU_USUARIO.github.io/pasatiempos/`.
 
 ## Instalar en el iPhone
 
