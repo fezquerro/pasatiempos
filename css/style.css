@@ -169,7 +169,9 @@ main {
 
 /* Sudoku */
 .sudoku-rejilla {
-  display: grid; grid-template-columns: repeat(9, 1fr); width: min(100%, 470px); aspect-ratio: 1;
+  /* Filas explícitas e iguales: si no, una fila sin números se aplasta en Safari */
+  display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); grid-template-rows: repeat(9, minmax(0, 1fr));
+  width: min(100%, 470px); aspect-ratio: 1;
   margin: 0 auto; border: 2px solid var(--texto); background: var(--superficie); border-radius: 4px; overflow: hidden;
 }
 .celda {
