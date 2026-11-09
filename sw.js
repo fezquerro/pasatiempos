@@ -1,9 +1,9 @@
 // Service worker: permite jugar sin conexión
-const VERSION = 'pasatiempos-v1';
+const VERSION = 'pasatiempos-v2';
 const ARCHIVOS = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/comun.js', 'js/teclado.js', 'js/wordle.js', 'js/sudoku.js', 'js/lexireto.js', 'js/crucigrama.js', 'js/app.js',
-  'data/palabras.js', 'data/frecuentes.js', 'data/wordle.js', 'data/pistas.js',
+  'data/palabras.js', 'data/frecuentes.js', 'data/wordle.js', 'data/pistas.js', 'data/pistas-dificiles.js',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'
 ];
 

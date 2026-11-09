@@ -4,7 +4,7 @@ Aplicación web de pasatiempos en español de España, pensada para el iPhone
 (se instala en la pantalla de inicio y funciona sin conexión):
 
 - **Palabra del día**: adivina la palabra de cinco letras en seis intentos. Partidas libres y estadísticas.
-- **Crucigrama**: uno nuevo cada día (y libres), generado a partir de un banco de 317 palabras con pistas propias.
+- **Crucigrama**: uno nuevo cada día (y libres), generado a partir de un banco de 715 palabras (396 de ellas más difíciles) con pistas propias.
 - **Sudoku**: niveles fácil, media, difícil y experto, con notas, pistas, deshacer y récords.
 - **Lexireto**: siete letras en un panal; forma palabras que usen siempre la letra central.
 
@@ -28,7 +28,7 @@ Se abrirá a pantalla completa, como una app, y guardará el progreso en el tel�
   diccionario Hunspell de LibreOffice, para descartar formas verbales y plurales. Sirven para
   elegir las soluciones del Wordle y el objetivo del Lexireto.
 - `data/wordle.js`: 1000 soluciones posibles del Wordle.
-- `data/pistas.js`: palabras y pistas del crucigrama.
+- `data/pistas.js` y `data/pistas-dificiles.js`: palabras y pistas del crucigrama.
 
 Para regenerarlos (Git Bash o Linux):
 

@@ -2,86 +2,130 @@
 'use strict';
 
 const Crucigrama = (() => {
-  const MAX_LADO = 11, OBJETIVO = 16;
+  const MAX_LADO = 11, MAX_PALABRAS = 26, MAX_CORTAS = 3, INTENTOS = 24;
+  const N = 2 * MAX_LADO + 1; // tablero de trabajo; la primera palabra va en el centro
+  // Versión del generador: si cambia, las partidas guardadas con otra versión se reinician
+  const VERSION = 2;
 
-  function banco() {
-    return window.PISTAS.trim().split('\n').map(l => {
+  function leer(texto) {
+    return texto.trim().split('\n').map(l => {
       const [p, pista] = l.split('|');
       return { palabra: U.norm(p.trim()), pista: pista.trim() };
     }).filter(e => e.palabra.length >= 3 && e.palabra.length <= MAX_LADO);
   }
 
+  // Cada intento usa una selección al azar del banco: 170 palabras difíciles y 30 fáciles
+  let bancos = null;
+  function seleccion(rnd) {
+    bancos ||= [leer(window.PISTAS_DIFICILES), leer(window.PISTAS)];
+    const dificiles = U.barajar(bancos[0].slice(), rnd).slice(0, 170);
+    const faciles = U.barajar(bancos[1].slice(), rnd).slice(0, 30);
+    return [...dificiles, ...faciles];
+  }
+
   function intentar(lista, rnd) {
-    const celdas = new Map(); // "f,c" -> letra
+    const tab = new Array(N * N).fill('');
+    const sentidos = new Uint8Array(N * N); // 1: casilla de una horizontal, 2: de una vertical
+    const porLetra = {}; // letra -> casillas del tablero que la contienen
     const colocadas = [];
-    let minF = 0, maxF = 0, minC = 0, maxC = 0;
-    const k = (f, c) => f + ',' + c;
+    const usadas = new Set();
+    let cortas = 0; // palabras de tres letras colocadas
+    let minF = MAX_LADO, maxF = MAX_LADO, minC = MAX_LADO, maxC = MAX_LADO;
 
     function poner(e, f, c, dir) {
       const [df, dc] = dir === 'h' ? [0, 1] : [1, 0];
-      for (let i = 0; i < e.palabra.length; i++) celdas.set(k(f + i * df, c + i * dc), e.palabra[i]);
+      for (let i = 0; i < e.palabra.length; i++) {
+        const idx = (f + i * df) * N + c + i * dc;
+        if (!tab[idx]) { tab[idx] = e.palabra[i]; (porLetra[e.palabra[i]] ||= []).push(idx); }
+        sentidos[idx] |= dir === 'h' ? 1 : 2;
+      }
       minF = Math.min(minF, f); minC = Math.min(minC, c);
       maxF = Math.max(maxF, f + (e.palabra.length - 1) * df); maxC = Math.max(maxC, c + (e.palabra.length - 1) * dc);
       colocadas.push({ ...e, f, c, dir });
+      usadas.add(e.palabra);
+      if (e.palabra.length === 3) cortas++;
     }
 
+    const libre = (f, c) => f < 0 || c < 0 || f >= N || c >= N || !tab[f * N + c];
+
+    // Devuelve el número de cruces de la palabra en esa posición, o -1 si no cabe
     function evaluar(p, f, c, dir) {
       const [df, dc] = dir === 'h' ? [0, 1] : [1, 0];
-      const n = p.length;
-      if (celdas.has(k(f - df, c - dc)) || celdas.has(k(f + n * df, c + n * dc))) return -1;
-      const fF = f + (n - 1) * df, fC = c + (n - 1) * dc;
+      const n = p.length, fF = f + (n - 1) * df, fC = c + (n - 1) * dc;
+      if (f < 0 || c < 0 || fF >= N || fC >= N) return -1;
       if (Math.max(maxF, fF) - Math.min(minF, f) >= MAX_LADO || Math.max(maxC, fC) - Math.min(minC, c) >= MAX_LADO) return -1;
+      if (!libre(f - df, c - dc) || !libre(fF + df, fC + dc)) return -1;
       let cruces = 0;
+      const sentido = dir === 'h' ? 1 : 2;
       for (let i = 0; i < n; i++) {
-        const ff = f + i * df, cc = c + i * dc;
-        const actual = celdas.get(k(ff, cc));
+        const ff = f + i * df, cc = c + i * dc, actual = tab[ff * N + cc];
         if (actual) {
-          if (actual !== p[i]) return -1;
+          // Solo se puede cruzar una palabra perpendicular, nunca solaparse con una paralela
+          if (actual !== p[i] || (sentidos[ff * N + cc] & sentido)) return -1;
           cruces++;
-        } else if (celdas.has(k(ff + dc, cc + df)) || celdas.has(k(ff - dc, cc - df))) return -1;
+        } else if (!libre(ff + dc, cc + df) || !libre(ff - dc, cc - df)) return -1;
       }
       return cruces === n ? -1 : cruces;
     }
 
-    const primera = lista.find(e => e.palabra.length >= 6 && e.palabra.length <= 9) || lista[0];
-    poner(primera, 0, 0, 'h');
-    const usadas = new Set([primera.palabra]);
+    const largas = lista.filter(e => e.palabra.length >= 7 && e.palabra.length <= 10);
+    const primera = largas[Math.floor(rnd() * largas.length)] || lista[0];
+    poner(primera, MAX_LADO, MAX_LADO - (primera.palabra.length >> 1), 'h');
 
-    for (let pasada = 0; pasada < 2 && colocadas.length < OBJETIVO; pasada++) {
+    // En cada paso se coloca, de todas las palabras, la que más letras comparte
+    while (colocadas.length < MAX_PALABRAS) {
+      let mejor = null;
       for (const e of lista) {
-        if (colocadas.length >= OBJETIVO) break;
         if (usadas.has(e.palabra)) continue;
-        let mejor = null;
-        for (const [clave, letra] of celdas) {
-          const [cf, cc] = clave.split(',').map(Number);
-          for (let i = 0; i < e.palabra.length; i++) {
-            if (e.palabra[i] !== letra) continue;
+        if (e.palabra.length === 3 && cortas >= MAX_CORTAS) continue;
+        const p = e.palabra;
+        for (let i = 0; i < p.length; i++) {
+          const sitios = porLetra[p[i]];
+          if (!sitios) continue;
+          for (const idx of sitios) {
+            const cf = Math.floor(idx / N), cc = idx % N;
             for (const dir of ['h', 'v']) {
               const f = dir === 'h' ? cf : cf - i, c = dir === 'h' ? cc - i : cc;
-              const cruces = evaluar(e.palabra, f, c, dir);
-              if (cruces > 0) {
-                const valor = cruces * 10 + rnd() * 5;
-                if (!mejor || valor > mejor.valor) mejor = { f, c, dir, valor };
-              }
+              const cruces = evaluar(p, f, c, dir);
+              if (cruces <= 0) continue;
+              // Prima los cruces; a igualdad, palabras no muy largas y cerca del centro
+              const valor = cruces * cruces * 14 - p.length / 2 + rnd() * 5 - Math.abs(f - MAX_LADO) - Math.abs(c - MAX_LADO);
+              if (!mejor || valor > mejor.valor) mejor = { e, f, c, dir, valor };
             }
           }
         }
-        if (mejor) { poner(e, mejor.f, mejor.c, mejor.dir); usadas.add(e.palabra); }
       }
+      if (!mejor) break;
+      poner(mejor.e, mejor.f, mejor.c, mejor.dir);
     }
-    // Normaliza coordenadas
+
+    // Puntuación: muchas letras compartidas y pocas palabras con un solo cruce
+    const usos = new Map();
+    for (const p of colocadas) for (let i = 0; i < p.palabra.length; i++) {
+      const idx = (p.f + (p.dir === 'v' ? i : 0)) * N + p.c + (p.dir === 'h' ? i : 0);
+      usos.set(idx, (usos.get(idx) || 0) + 1);
+    }
+    const compartidas = [...usos.values()].filter(u => u > 1).length;
+    let unCruce = 0;
+    for (const p of colocadas) {
+      let n = 0;
+      for (let i = 0; i < p.palabra.length; i++) {
+        if (usos.get((p.f + (p.dir === 'v' ? i : 0)) * N + p.c + (p.dir === 'h' ? i : 0)) > 1) n++;
+      }
+      if (n === 1) unCruce++;
+    }
     for (const p of colocadas) { p.f -= minF; p.c -= minC; }
-    const filas = maxF - minF + 1, cols = maxC - minC + 1;
-    const letras = [...celdas.values()].length;
-    return { colocadas, filas, cols, valor: colocadas.length * 100 + letras * 2 - (filas * cols) * 0.5 };
+    return {
+      colocadas, filas: maxF - minF + 1, cols: maxC - minC + 1, compartidas, letras: usos.size, unCruce,
+      valor: compartidas * 10 + usos.size - unCruce * 8
+    };
   }
 
   function generar(semilla) {
-    const rnd = U.azar('cruci-' + semilla);
-    const base = banco();
+    const rnd = U.azar('cruci-' + VERSION + '-' + semilla);
     let mejor = null;
-    for (let i = 0; i < 25; i++) {
-      const r = intentar(U.barajar(base.slice(), rnd), rnd);
+    for (let i = 0; i < INTENTOS; i++) {
+      const r = intentar(seleccion(rnd), rnd);
       if (!mejor || r.valor > mejor.valor) mejor = r;
     }
     // Numeración en orden de lectura
@@ -112,7 +156,7 @@ const Crucigrama = (() => {
 
   function estadoHoy() {
     const e = U.guardado.leer('crucigrama.diario');
-    if (!e || e.semilla !== U.hoy()) return '';
+    if (!e || e.semilla !== U.hoy() || e.v !== VERSION) return '';
     return e.resuelto ? '✓ Resuelto' : Object.keys(e.letras).length ? 'En curso' : '';
   }
 
@@ -141,8 +185,9 @@ const Crucigrama = (() => {
 
     function cargar() {
       estado = U.guardado.leer('crucigrama.' + modo);
-      if (modo === 'diario' && (!estado || estado.semilla !== U.hoy())) estado = { semilla: U.hoy(), letras: {}, reveladas: [], segundos: 0, resuelto: false };
-      if (modo === 'libre' && !estado) estado = { semilla: 'libre-' + Date.now(), letras: {}, reveladas: [], segundos: 0, resuelto: false };
+      if (estado && estado.v !== VERSION) estado = null;
+      if (modo === 'diario' && (!estado || estado.semilla !== U.hoy())) estado = { v: VERSION, semilla: U.hoy(), letras: {}, reveladas: [], segundos: 0, resuelto: false };
+      if (modo === 'libre' && !estado) estado = { v: VERSION, semilla: 'libre-' + Date.now(), letras: {}, reveladas: [], segundos: 0, resuelto: false };
       cruci = generar(estado.semilla);
       const p = cruci.palabras[0];
       sel = [p.f, p.c]; dir = p.dir;
@@ -368,6 +413,6 @@ const Crucigrama = (() => {
 
   return {
     id: 'crucigrama', titulo: 'Crucigrama', descripcion: 'Un crucigrama nuevo cada día',
-    icono: '✎', color: '#cf4f43', datos: ['data/pistas.js'], ayuda, estadoHoy, montar, generar
+    icono: '✎', color: '#cf4f43', datos: ['data/pistas.js', 'data/pistas-dificiles.js'], ayuda, estadoHoy, montar, generar
   };
 })();
